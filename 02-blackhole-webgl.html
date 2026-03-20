@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M87* — Singularity</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--g:#c8a863;--bg:#02010a;}
+html,body{height:100%;overflow:hidden;background:var(--bg);}
+body{font-family:'Outfit',sans-serif;color:#f0ede8;cursor:none;}
+
+/* ── Custom cursor ── */
+#cursor{position:fixed;z-index:9999;pointer-events:none;top:0;left:0;}
+.c-outer{position:absolute;width:36px;height:36px;border:1px solid rgba(200,168,99,.5);border-radius:50%;transform:translate(-50%,-50%);transition:width .3s,height .3s,border-color .3s;}
+.c-inner{position:absolute;width:5px;height:5px;background:var(--g);border-radius:50%;transform:translate(-50%,-50%);}
+
+/* ── WebGL Canvas (fullscreen) ── */
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0;}
+
+/* ── Overlay UI ── */
+.overlay{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:36px 48px;}
+
+/* Top row */
+.top-row{display:flex;justify-content:space-between;align-items:flex-start;}
+.brand{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.2em;color:rgba(200,168,99,.7);opacity:0;animation:fadeUp .8s ease .5s forwards;}
+.coords{font-family:'DM Mono',monospace;font-size:10px;color:rgba(200,168,99,.4);text-align:right;line-height:1.8;opacity:0;animation:fadeUp .8s ease .7s forwards;}
+
+/* Center text */
+.center-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;}
+.main-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:rgba(200,168,99,.6);margin-bottom:16px;opacity:0;animation:fadeUp .8s ease 1s forwards;}
+.main-title{font-size:clamp(48px,9vw,110px);font-weight:100;letter-spacing:-3px;line-height:.95;opacity:0;animation:fadeUp 1s ease 1.2s forwards;}
+.main-title .italic{font-style:italic;font-weight:200;color:var(--g);}
+.main-sub{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;color:rgba(240,237,232,.3);margin-top:20px;opacity:0;animation:fadeUp .8s ease 1.6s forwards;}
+
+/* Scan line effect */
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:8;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);animation:scanMove 8s linear infinite;}
+@keyframes scanMove{from{background-position:0 0}to{background-position:0 100px}}
+
+/* Side readout */
+.side-readout{position:absolute;right:48px;top:50%;transform:translateY(-50%);font-family:'DM Mono',monospace;font-size:10px;color:rgba(200,168,99,.35);line-height:2.4;letter-spacing:.08em;opacity:0;animation:fadeIn 1s ease 2s forwards;}
+.readout-line{display:flex;gap:16px;justify-content:flex-end;}
+.readout-label{color:rgba(200,168,99,.2);}
+
+/* Bottom controls */
+.bottom-row{display:flex;justify-content:space-between;align-items:flex-end;pointer-events:auto;}
+.nav-pills{display:flex;gap:8px;opacity:0;animation:fadeUp .8s ease 2.2s forwards;}
+.pill{padding:8px 20px;border:0.5px solid rgba(200,168,99,.25);border-radius:999px;font-size:11px;letter-spacing:.08em;color:rgba(200,168,99,.6);cursor:pointer;transition:all .25s;background:rgba(2,1,10,.4);backdrop-filter:blur(10px);}
+.pill:hover,.pill.active{border-color:var(--g);color:#f0ede8;background:rgba(200,168,99,.1);}
+.bottom-right{font-family:'DM Mono',monospace;font-size:10px;color:rgba(200,168,99,.2);text-align:right;opacity:0;animation:fadeIn .8s ease 2.4s forwards;line-height:2;}
+
+/* HUD lines */
+.hud-corner{position:fixed;pointer-events:none;z-index:9;}
+.hud-corner svg{display:block;}
+.hud-tl{top:24px;left:24px;}
+.hud-tr{top:24px;right:24px;}
+.hud-bl{bottom:24px;left:24px;}
+.hud-br{bottom:24px;right:24px;}
+
+/* Info panel */
+.info-panel{
+  position:fixed;left:48px;top:50%;transform:translateY(-50%);
+  z-index:15;pointer-events:none;
+  opacity:0;animation:fadeIn 1s ease 1.8s forwards;
+}
+.info-item{display:flex;flex-direction:column;gap:2px;margin-bottom:24px;}
+.info-val{font-size:22px;font-weight:200;letter-spacing:-.5px;color:#f0ede8;}
+.info-key{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;color:rgba(200,168,99,.4);text-transform:uppercase;}
+
+/* Ambient orbs */
+.orb{position:fixed;border-radius:50%;pointer-events:none;z-index:1;filter:blur(60px);animation:orbFloat var(--dur,14s) ease-in-out infinite alternate;}
+@keyframes orbFloat{from{transform:translate(0,0)}to{transform:translate(var(--tx,30px),var(--ty,20px))}}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* Interaction hint */
+.hint{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;color:rgba(200,168,99,.25);text-align:center;z-index:20;animation:pulseHint 3s ease-in-out infinite;}
+@keyframes pulseHint{0%,100%{opacity:.25}50%{opacity:.5}}
+</style>
+</head>
+<body>
+
+<!-- Cursor -->
+<div id="cursor"><div class="c-outer"></div><div class="c-inner"></div></div>
+
+<!-- Scanlines -->
+<div class="scanlines"></div>
+
+<!-- Ambient orbs (subtle light behind canvas) -->
+<div class="orb" style="width:600px;height:600px;background:radial-gradient(#301808,transparent);top:10%;left:20%;opacity:.3;--dur:16s;--tx:40px;--ty:-30px;"></div>
+<div class="orb" style="width:400px;height:400px;background:radial-gradient(#181008,transparent);bottom:10%;right:15%;opacity:.2;--dur:12s;--tx:-30px;--ty:40px;"></div>
+
+<!-- WebGL Canvas -->
+<canvas id="gl"></canvas>
+
+<!-- HUD corners -->
+<div class="hud-corner hud-tl"><svg width="40" height="40"><path d="M40 0 L0 0 L0 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+<div class="hud-corner hud-tr"><svg width="40" height="40"><path d="M0 0 L40 0 L40 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+<div class="hud-corner hud-bl"><svg width="40" height="40"><path d="M0 0 L0 40 L40 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+<div class="hud-corner hud-br"><svg width="40" height="40"><path d="M40 0 L40 40 L0 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+
+<!-- Info panel left -->
+<div class="info-panel">
+  <div class="info-item"><div class="info-val">M87*</div><div class="info-key">Designation</div></div>
+  <div class="info-item"><div class="info-val">6.5 B M☉</div><div class="info-key">Mass</div></div>
+  <div class="info-item"><div class="info-val">55 Mly</div><div class="info-key">Distance</div></div>
+  <div class="info-item"><div class="info-val">April 2019</div><div class="info-key">First image</div></div>
+</div>
+
+<!-- Main overlay -->
+<div class="overlay">
+  <div class="top-row">
+    <div class="brand">EHT · SINGULARITY</div>
+    <div class="coords">
+      RA 12h 30m 49.4s<br>
+      Dec +12° 23' 28"<br>
+      Virgo A · NGC 4486
+    </div>
+  </div>
+  <div></div>
+  <div class="bottom-row">
+    <div class="nav-pills">
+      <div class="pill active" data-mode="0">Accretion</div>
+      <div class="pill" data-mode="1">Lensing</div>
+      <div class="pill" data-mode="2">Jets</div>
+      <div class="pill" data-mode="3">Radio</div>
+    </div>
+    <div class="bottom-right">
+      <div id="fps-counter">60 fps</div>
+      <div>WebGL 2.0 · GLSL ES 3.0</div>
+    </div>
+  </div>
+</div>
+
+<!-- Center text -->
+<div class="center-text">
+  <div class="main-label">Messier 87 · Supermassive Black Hole</div>
+  <div class="main-title">Absolute<br><span class="italic">darkness</span></div>
+  <div class="main-sub">55,000,000 light-years · 6,500,000,000 M☉</div>
+</div>
+
+<!-- Side readout right -->
+<div class="side-readout">
+  <div class="readout-line"><span class="readout-label">TEMP</span><span id="r-temp">1.2×10¹¹ K</span></div>
+  <div class="readout-line"><span class="readout-label">SPIN</span><span id="r-spin">0.92 a/M</span></div>
+  <div class="readout-line"><span class="readout-label">JET</span><span id="r-jet">0.999c</span></div>
+  <div class="readout-line"><span class="readout-label">Rₛ</span><span id="r-rs">38.5 AU</span></div>
+  <div class="readout-line"><span class="readout-label">MODE</span><span id="r-mode">ISCO</span></div>
+</div>
+
+<div class="hint">DRAG TO ROTATE · SCROLL TO ZOOM</div>
+
+<!-- ═══════════════════════════
+     WEBGL SHADER ENGINE
+═══════════════════════════ -->
+<script>
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+if (!gl) { document.body.innerHTML = '<div style="color:#fff;padding:40px">WebGL not supported</div>'; }
+
+function resize() {
+  canvas.width  = window.innerWidth  * devicePixelRatio;
+  canvas.height = window.innerHeight * devicePixelRatio;
+  canvas.style.width  = window.innerWidth  + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+resize();
+window.addEventListener('resize', resize);
+
+/* ── Vertex shader (fullscreen quad) ── */
+const VS = `#version 300 es
+precision highp float;
+in vec2 a_pos;
+out vec2 v_uv;
+void main(){
+  v_uv = a_pos * .5 + .5;
+  gl_Position = vec4(a_pos, 0., 1.);
+}`;
+
+/* ── Fragment shader — Black hole ray marching ── */
+const FS = `#version 300 es
+precision highp float;
+
+uniform float u_time;
+uniform vec2  u_res;
+uniform vec2  u_mouse;
+uniform float u_mode;
+uniform float u_zoom;
+
+in  vec2 v_uv;
+out vec4 fragColor;
+
+#define PI  3.14159265
+#define TAU 6.28318530
+#define MAX_STEPS 120
+#define EPSILON   0.001
+
+/* ── Hash / noise ── */
+float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p), u=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),
+             mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x),u.y);
+}
+float fbm(vec2 p){
+  float v=0.,a=.5;
+  for(int i=0;i<5;i++){v+=a*noise(p);p*=2.;a*=.5;}
+  return v;
+}
+
+/* ── Accretion disk ── */
+float diskDensity(vec3 p, float t){
+  float r=length(p.xz);
+  float h=abs(p.y);
+  float rInner=.35, rOuter=1.8;
+  if(r<rInner||r>rOuter) return 0.;
+  float falloff=smoothstep(rInner,rInner+.15,r)*smoothstep(rOuter,rOuter-.3,r);
+  float angle=atan(p.z,p.x)+t*1.4/max(r,.5);
+  float spiral=fbm(vec2(angle*1.5+r*2.,t*.3))*1.4;
+  float heightFall=exp(-h*h*18./(r*.4+.1));
+  return falloff*spiral*heightFall;
+}
+
+/* ── Ray-march the disk ── */
+vec3 marchDisk(vec3 ro, vec3 rd, float t){
+  vec3 col=vec3(0.);
+  float transmit=1.;
+  float dt=.04;
+  for(int i=0;i<80;i++){
+    vec3 p=ro+rd*float(i)*dt;
+    if(length(p)>.01){ // avoid singularity
+      float d=diskDensity(p,t);
+      if(d>.002){
+        // Relativistic beaming: brighter on approaching side
+        float beam=.5+.5*normalize(p).x;
+        // Color: inner=white-hot, outer=orange-red
+        float r=length(p.xz);
+        float temp=clamp(1.2-r*.55,0.,1.);
+        vec3 hotColor=mix(vec3(.9,.3,.05),mix(vec3(1.,.6,.1),vec3(1.,.92,.75),temp),temp);
+        hotColor*=beam*1.6+.4;
+        float alpha=d*dt*2.5*transmit;
+        col+=hotColor*alpha;
+        transmit*=exp(-d*dt*1.8);
+        if(transmit<.01) break;
+      }
+    }
+  }
+  return col;
+}
+
+/* ── Gravitational lensing (approximate) ── */
+vec3 lensingRay(vec3 ro, vec3 rd, float bhR){
+  // Simple 2D gravitational deflection
+  float distToAxis=length(ro.xz);
+  float strength=.5*bhR/max(distToAxis*.8,bhR*1.1);
+  vec3 toCenter=normalize(-ro);
+  rd=normalize(rd+toCenter*strength*.4);
+  return rd;
+}
+
+/* ── Photon ring ── */
+float photonRing(vec3 p, float r, float width){
+  float d=abs(length(p.xz)-r);
+  return smoothstep(width,0.,d)*smoothstep(-.05,.3,abs(p.y)-.02);
+}
+
+/* ── Stars background ── */
+vec3 starfield(vec3 dir){
+  vec2 uv=vec2(atan(dir.z,dir.x)/TAU, dir.y*.5+.5);
+  float s=0.;
+  for(float i=1.;i<4.;i++){
+    vec2 grid=uv*150.*i;
+    vec2 cell=floor(grid), local=fract(grid)-.5;
+    float r=hash(cell+i*73.1);
+    float d=length(local);
+    s+=smoothstep(.12*r,.0,d)*r*(i*.4);
+  }
+  return vec3(s*.7,.6*s,.5*s);
+}
+
+void main(){
+  vec2 uv=(v_uv*2.-1.)*vec2(u_res.x/u_res.y,1.);
+
+  /* Camera with mouse drag */
+  float mx=u_mouse.x*PI;
+  float my=(u_mouse.y-.5)*PI*.8;
+  float zoom=u_zoom;
+
+  /* Build ray direction */
+  vec3 ro=vec3(sin(mx)*cos(my), sin(my), cos(mx)*cos(my))*zoom;
+  vec3 target=vec3(0.);
+  vec3 fw=normalize(target-ro);
+  vec3 rr=normalize(cross(fw,vec3(0.,1.,0.)));
+  vec3 up=cross(rr,fw);
+  vec3 rd=normalize(fw + uv.x*rr*.7 + uv.y*up*.7);
+
+  /* Lensing deflection */
+  rd=lensingRay(ro,rd,.38);
+
+  float t=u_time;
+  vec3 col=vec3(0.);
+
+  /* Event horizon check */
+  float bhR=.38;
+  float a=dot(rd,rd), b=2.*dot(ro,rd), c=dot(ro,ro)-bhR*bhR;
+  float disc=b*b-4.*a*c;
+  bool hitBH=disc>0.&&(-b-sqrt(disc))/(2.*a)>0.;
+
+  if(!hitBH){
+    /* Starfield */
+    col=starfield(rd)*1.2;
+
+    /* Disk march */
+    if(u_mode<.5||u_mode>2.5){
+      col+=marchDisk(ro,rd,t);
+    }
+
+    /* Photon sphere ring glow */
+    vec3 closestPoint=ro+rd*clamp(-dot(ro,rd),0.,10.);
+    float distToCenter=length(closestPoint);
+    float ringGlow=exp(-pow(distToCenter-.52,2.)*40.)*1.8;
+    col+=vec3(1.,.62,.18)*ringGlow*.5;
+
+    /* Mode: Lensing rings */
+    if(u_mode>0.5&&u_mode<1.5){
+      for(float i=1.;i<5.;i++){
+        float pr=photonRing(closestPoint,.38+i*.12,.03);
+        col+=vec3(.9,.55,.1)*pr*.8/i;
+      }
+    }
+
+    /* Mode: Jets (bluish beams) */
+    if(u_mode>1.5&&u_mode<2.5){
+      float jetR=length(vec2(rd.x,rd.z));
+      float jetAlign=abs(rd.y);
+      float jet=exp(-jetR*jetR*40.)*jetAlign*2.5;
+      float jetNoise=fbm(vec2(jetR*20.,t+jetAlign*3.));
+      col+=vec3(.3,.6,1.)*jet*jetNoise;
+      col+=marchDisk(ro,rd,t)*.4;
+    }
+
+    /* Mode: Radio (false color) */
+    if(u_mode>2.5){
+      float intensity=dot(col,vec3(.299,.587,.114));
+      col=mix(vec3(.05,.01,.0),
+          mix(vec3(.8,.2,.0),
+          mix(vec3(1.,.65,.0),vec3(1.,.95,.7),intensity*2.-1.),
+          intensity),intensity);
+    }
+
+    /* Vignette */
+    float vign=length(uv*.7);
+    col*=smoothstep(1.8,.2,vign);
+
+  } else {
+    /* Black hole shadow — absolute black with slight Hawking glow */
+    float hawking=exp(-dist(ro,vec3(0.))*1.2)*.015;
+    col=vec3(hawking*.8,hawking*.4,hawking*.1);
+  }
+
+  /* Tone mapping (Reinhard) */
+  col=col/(col+1.);
+  col=pow(col,vec3(1./2.2));
+
+  /* Film grain */
+  float grain=hash(v_uv+fract(t*.017))*.04-.02;
+  col=clamp(col+grain,0.,1.);
+
+  fragColor=vec4(col,1.);
+}`;
+
+/* ── Compile shader ── */
+function compile(src, type) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    console.warn(gl.getShaderInfoLog(sh));
+  }
+  return sh;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(VS, gl.VERTEX_SHADER));
+gl.attachShader(prog, compile(FS, gl.FRAGMENT_SHADER));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+/* ── Fullscreen quad ── */
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+/* ── Uniforms ── */
+const U = {
+  time:  gl.getUniformLocation(prog,'u_time'),
+  res:   gl.getUniformLocation(prog,'u_res'),
+  mouse: gl.getUniformLocation(prog,'u_mouse'),
+  mode:  gl.getUniformLocation(prog,'u_mode'),
+  zoom:  gl.getUniformLocation(prog,'u_zoom'),
+};
+
+/* ── State ── */
+let mouseX = .5, mouseY = .5;
+let targetMX = .5, targetMY = .5;
+let isDragging = false, lastMX = 0, lastMY = 0;
+let mode = 0, zoom = 2.8, targetZoom = 2.8;
+let frameCount = 0, lastFPSTime = performance.now();
+
+canvas.addEventListener('mousedown', e => { isDragging = true; lastMX = e.clientX; lastMY = e.clientY; });
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  // Cursor
+  const c = document.getElementById('cursor');
+  c.style.left = e.clientX + 'px';
+  c.style.top  = e.clientY + 'px';
+  // Drag rotate
+  if (isDragging) {
+    targetMX += (e.clientX - lastMX) / window.innerWidth * 2;
+    targetMY += (e.clientY - lastMY) / window.innerHeight;
+    lastMX = e.clientX; lastMY = e.clientY;
+  }
+});
+window.addEventListener('wheel', e => {
+  targetZoom = Math.max(1.4, Math.min(5, targetZoom + e.deltaY * .003));
+}, { passive: true });
+canvas.addEventListener('touchstart', e => { isDragging = true; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY; }, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  targetMX += (e.touches[0].clientX - lastMX) / window.innerWidth * 2;
+  targetMY += (e.touches[0].clientY - lastMY) / window.innerHeight;
+  lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
+}, { passive: true });
+canvas.addEventListener('touchend', () => isDragging = false);
+
+/* ── Mode switching ── */
+document.querySelectorAll('.pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    mode = parseInt(pill.dataset.mode);
+    const modes = ['ISCO','LENSING','JETS','RADIO'];
+    const readouts = [['1.2×10¹¹ K','0.92 a/M','0.999c','38.5 AU'],
+                      ['8.6×10¹⁰ K','0.92 a/M','—','38.5 AU'],
+                      ['1.4×10¹¹ K','0.97 a/M','0.999c','38.5 AU'],
+                      ['— K','0.92 a/M','—','38.5 AU']];
+    document.getElementById('r-mode').textContent = modes[mode];
+    document.getElementById('r-temp').textContent = readouts[mode][0];
+    document.getElementById('r-spin').textContent = readouts[mode][1];
+    document.getElementById('r-jet').textContent  = readouts[mode][2];
+    document.getElementById('r-rs').textContent   = readouts[mode][3];
+  });
+});
+
+/* ── Render loop ── */
+let t0 = performance.now();
+function render(now) {
+  requestAnimationFrame(render);
+  const t = (now - t0) * .001;
+
+  // Smooth mouse & zoom
+  mouseX += (targetMX - mouseX) * .06;
+  mouseY += (targetMY - mouseY) * .06;
+  zoom   += (targetZoom - zoom)  * .08;
+
+  // Auto-rotate when not dragging
+  if (!isDragging) targetMX += .0012;
+
+  gl.uniform1f(U.time,  t);
+  gl.uniform2f(U.res,   canvas.width, canvas.height);
+  gl.uniform2f(U.mouse, mouseX, mouseY);
+  gl.uniform1f(U.mode,  mode);
+  gl.uniform1f(U.zoom,  zoom);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // FPS
+  frameCount++;
+  if (now - lastFPSTime > 1000) {
+    document.getElementById('fps-counter').textContent =
+      Math.round(frameCount * 1000 / (now - lastFPSTime)) + ' fps';
+    frameCount = 0; lastFPSTime = now;
+  }
+}
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M87* — Singularity</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--g:#c8a863;--bg:#02010a;}
+html,body{height:100%;overflow:hidden;background:var(--bg);}
+body{font-family:'Outfit',sans-serif;color:#f0ede8;cursor:none;}
+
+/* ── Custom cursor ── */
+#cursor{position:fixed;z-index:9999;pointer-events:none;top:0;left:0;}
+.c-outer{position:absolute;width:36px;height:36px;border:1px solid rgba(200,168,99,.5);border-radius:50%;transform:translate(-50%,-50%);transition:width .3s,height .3s,border-color .3s;}
+.c-inner{position:absolute;width:5px;height:5px;background:var(--g);border-radius:50%;transform:translate(-50%,-50%);}
+
+/* ── WebGL Canvas (fullscreen) ── */
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0;}
+
+/* ── Overlay UI ── */
+.overlay{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:36px 48px;}
+
+/* Top row */
+.top-row{display:flex;justify-content:space-between;align-items:flex-start;}
+.brand{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.2em;color:rgba(200,168,99,.7);opacity:0;animation:fadeUp .8s ease .5s forwards;}
+.coords{font-family:'DM Mono',monospace;font-size:10px;color:rgba(200,168,99,.4);text-align:right;line-height:1.8;opacity:0;animation:fadeUp .8s ease .7s forwards;}
+
+/* Center text */
+.center-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;}
+.main-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:rgba(200,168,99,.6);margin-bottom:16px;opacity:0;animation:fadeUp .8s ease 1s forwards;}
+.main-title{font-size:clamp(48px,9vw,110px);font-weight:100;letter-spacing:-3px;line-height:.95;opacity:0;animation:fadeUp 1s ease 1.2s forwards;}
+.main-title .italic{font-style:italic;font-weight:200;color:var(--g);}
+.main-sub{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;color:rgba(240,237,232,.3);margin-top:20px;opacity:0;animation:fadeUp .8s ease 1.6s forwards;}
+
+/* Scan line effect */
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:8;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);animation:scanMove 8s linear infinite;}
+@keyframes scanMove{from{background-position:0 0}to{background-position:0 100px}}
+
+/* Side readout */
+.side-readout{position:absolute;right:48px;top:50%;transform:translateY(-50%);font-family:'DM Mono',monospace;font-size:10px;color:rgba(200,168,99,.35);line-height:2.4;letter-spacing:.08em;opacity:0;animation:fadeIn 1s ease 2s forwards;}
+.readout-line{display:flex;gap:16px;justify-content:flex-end;}
+.readout-label{color:rgba(200,168,99,.2);}
+
+/* Bottom controls */
+.bottom-row{display:flex;justify-content:space-between;align-items:flex-end;pointer-events:auto;}
+.nav-pills{display:flex;gap:8px;opacity:0;animation:fadeUp .8s ease 2.2s forwards;}
+.pill{padding:8px 20px;border:0.5px solid rgba(200,168,99,.25);border-radius:999px;font-size:11px;letter-spacing:.08em;color:rgba(200,168,99,.6);cursor:pointer;transition:all .25s;background:rgba(2,1,10,.4);backdrop-filter:blur(10px);}
+.pill:hover,.pill.active{border-color:var(--g);color:#f0ede8;background:rgba(200,168,99,.1);}
+.bottom-right{font-family:'DM Mono',monospace;font-size:10px;color:rgba(200,168,99,.2);text-align:right;opacity:0;animation:fadeIn .8s ease 2.4s forwards;line-height:2;}
+
+/* HUD lines */
+.hud-corner{position:fixed;pointer-events:none;z-index:9;}
+.hud-corner svg{display:block;}
+.hud-tl{top:24px;left:24px;}
+.hud-tr{top:24px;right:24px;}
+.hud-bl{bottom:24px;left:24px;}
+.hud-br{bottom:24px;right:24px;}
+
+/* Info panel */
+.info-panel{
+  position:fixed;left:48px;top:50%;transform:translateY(-50%);
+  z-index:15;pointer-events:none;
+  opacity:0;animation:fadeIn 1s ease 1.8s forwards;
+}
+.info-item{display:flex;flex-direction:column;gap:2px;margin-bottom:24px;}
+.info-val{font-size:22px;font-weight:200;letter-spacing:-.5px;color:#f0ede8;}
+.info-key{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;color:rgba(200,168,99,.4);text-transform:uppercase;}
+
+/* Ambient orbs */
+.orb{position:fixed;border-radius:50%;pointer-events:none;z-index:1;filter:blur(60px);animation:orbFloat var(--dur,14s) ease-in-out infinite alternate;}
+@keyframes orbFloat{from{transform:translate(0,0)}to{transform:translate(var(--tx,30px),var(--ty,20px))}}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* Interaction hint */
+.hint{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;color:rgba(200,168,99,.25);text-align:center;z-index:20;animation:pulseHint 3s ease-in-out infinite;}
+@keyframes pulseHint{0%,100%{opacity:.25}50%{opacity:.5}}
+</style>
+</head>
+<body>
+
+<!-- Cursor -->
+<div id="cursor"><div class="c-outer"></div><div class="c-inner"></div></div>
+
+<!-- Scanlines -->
+<div class="scanlines"></div>
+
+<!-- Ambient orbs (subtle light behind canvas) -->
+<div class="orb" style="width:600px;height:600px;background:radial-gradient(#301808,transparent);top:10%;left:20%;opacity:.3;--dur:16s;--tx:40px;--ty:-30px;"></div>
+<div class="orb" style="width:400px;height:400px;background:radial-gradient(#181008,transparent);bottom:10%;right:15%;opacity:.2;--dur:12s;--tx:-30px;--ty:40px;"></div>
+
+<!-- WebGL Canvas -->
+<canvas id="gl"></canvas>
+
+<!-- HUD corners -->
+<div class="hud-corner hud-tl"><svg width="40" height="40"><path d="M40 0 L0 0 L0 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+<div class="hud-corner hud-tr"><svg width="40" height="40"><path d="M0 0 L40 0 L40 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+<div class="hud-corner hud-bl"><svg width="40" height="40"><path d="M0 0 L0 40 L40 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+<div class="hud-corner hud-br"><svg width="40" height="40"><path d="M40 0 L40 40 L0 40" fill="none" stroke="rgba(200,168,99,.3)" stroke-width=".5"/></svg></div>
+
+<!-- Info panel left -->
+<div class="info-panel">
+  <div class="info-item"><div class="info-val">M87*</div><div class="info-key">Designation</div></div>
+  <div class="info-item"><div class="info-val">6.5 B M☉</div><div class="info-key">Mass</div></div>
+  <div class="info-item"><div class="info-val">55 Mly</div><div class="info-key">Distance</div></div>
+  <div class="info-item"><div class="info-val">April 2019</div><div class="info-key">First image</div></div>
+</div>
+
+<!-- Main overlay -->
+<div class="overlay">
+  <div class="top-row">
+    <div class="brand">EHT · SINGULARITY</div>
+    <div class="coords">
+      RA 12h 30m 49.4s<br>
+      Dec +12° 23' 28"<br>
+      Virgo A · NGC 4486
+    </div>
+  </div>
+  <div></div>
+  <div class="bottom-row">
+    <div class="nav-pills">
+      <div class="pill active" data-mode="0">Accretion</div>
+      <div class="pill" data-mode="1">Lensing</div>
+      <div class="pill" data-mode="2">Jets</div>
+      <div class="pill" data-mode="3">Radio</div>
+    </div>
+    <div class="bottom-right">
+      <div id="fps-counter">60 fps</div>
+      <div>WebGL 2.0 · GLSL ES 3.0</div>
+    </div>
+  </div>
+</div>
+
+<!-- Center text -->
+<div class="center-text">
+  <div class="main-label">Messier 87 · Supermassive Black Hole</div>
+  <div class="main-title">Absolute<br><span class="italic">darkness</span></div>
+  <div class="main-sub">55,000,000 light-years · 6,500,000,000 M☉</div>
+</div>
+
+<!-- Side readout right -->
+<div class="side-readout">
+  <div class="readout-line"><span class="readout-label">TEMP</span><span id="r-temp">1.2×10¹¹ K</span></div>
+  <div class="readout-line"><span class="readout-label">SPIN</span><span id="r-spin">0.92 a/M</span></div>
+  <div class="readout-line"><span class="readout-label">JET</span><span id="r-jet">0.999c</span></div>
+  <div class="readout-line"><span class="readout-label">Rₛ</span><span id="r-rs">38.5 AU</span></div>
+  <div class="readout-line"><span class="readout-label">MODE</span><span id="r-mode">ISCO</span></div>
+</div>
+
+<div class="hint">DRAG TO ROTATE · SCROLL TO ZOOM</div>
+
+<!-- ═══════════════════════════
+     WEBGL SHADER ENGINE
+═══════════════════════════ -->
+<script>
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+if (!gl) { document.body.innerHTML = '<div style="color:#fff;padding:40px">WebGL not supported</div>'; }
+
+function resize() {
+  canvas.width  = window.innerWidth  * devicePixelRatio;
+  canvas.height = window.innerHeight * devicePixelRatio;
+  canvas.style.width  = window.innerWidth  + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+resize();
+window.addEventListener('resize', resize);
+
+/* ── Vertex shader (fullscreen quad) ── */
+const VS = `#version 300 es
+precision highp float;
+in vec2 a_pos;
+out vec2 v_uv;
+void main(){
+  v_uv = a_pos * .5 + .5;
+  gl_Position = vec4(a_pos, 0., 1.);
+}`;
+
+/* ── Fragment shader — Black hole ray marching ── */
+const FS = `#version 300 es
+precision highp float;
+
+uniform float u_time;
+uniform vec2  u_res;
+uniform vec2  u_mouse;
+uniform float u_mode;
+uniform float u_zoom;
+
+in  vec2 v_uv;
+out vec4 fragColor;
+
+#define PI  3.14159265
+#define TAU 6.28318530
+#define MAX_STEPS 120
+#define EPSILON   0.001
+
+/* ── Hash / noise ── */
+float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p), u=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),
+             mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x),u.y);
+}
+float fbm(vec2 p){
+  float v=0.,a=.5;
+  for(int i=0;i<5;i++){v+=a*noise(p);p*=2.;a*=.5;}
+  return v;
+}
+
+/* ── Accretion disk ── */
+float diskDensity(vec3 p, float t){
+  float r=length(p.xz);
+  float h=abs(p.y);
+  float rInner=.35, rOuter=1.8;
+  if(r<rInner||r>rOuter) return 0.;
+  float falloff=smoothstep(rInner,rInner+.15,r)*smoothstep(rOuter,rOuter-.3,r);
+  float angle=atan(p.z,p.x)+t*1.4/max(r,.5);
+  float spiral=fbm(vec2(angle*1.5+r*2.,t*.3))*1.4;
+  float heightFall=exp(-h*h*18./(r*.4+.1));
+  return falloff*spiral*heightFall;
+}
+
+/* ── Ray-march the disk ── */
+vec3 marchDisk(vec3 ro, vec3 rd, float t){
+  vec3 col=vec3(0.);
+  float transmit=1.;
+  float dt=.04;
+  for(int i=0;i<80;i++){
+    vec3 p=ro+rd*float(i)*dt;
+    if(length(p)>.01){ // avoid singularity
+      float d=diskDensity(p,t);
+      if(d>.002){
+        // Relativistic beaming: brighter on approaching side
+        float beam=.5+.5*normalize(p).x;
+        // Color: inner=white-hot, outer=orange-red
+        float r=length(p.xz);
+        float temp=clamp(1.2-r*.55,0.,1.);
+        vec3 hotColor=mix(vec3(.9,.3,.05),mix(vec3(1.,.6,.1),vec3(1.,.92,.75),temp),temp);
+        hotColor*=beam*1.6+.4;
+        float alpha=d*dt*2.5*transmit;
+        col+=hotColor*alpha;
+        transmit*=exp(-d*dt*1.8);
+        if(transmit<.01) break;
+      }
+    }
+  }
+  return col;
+}
+
+/* ── Gravitational lensing (approximate) ── */
+vec3 lensingRay(vec3 ro, vec3 rd, float bhR){
+  // Simple 2D gravitational deflection
+  float distToAxis=length(ro.xz);
+  float strength=.5*bhR/max(distToAxis*.8,bhR*1.1);
+  vec3 toCenter=normalize(-ro);
+  rd=normalize(rd+toCenter*strength*.4);
+  return rd;
+}
+
+/* ── Photon ring ── */
+float photonRing(vec3 p, float r, float width){
+  float d=abs(length(p.xz)-r);
+  return smoothstep(width,0.,d)*smoothstep(-.05,.3,abs(p.y)-.02);
+}
+
+/* ── Stars background ── */
+vec3 starfield(vec3 dir){
+  vec2 uv=vec2(atan(dir.z,dir.x)/TAU, dir.y*.5+.5);
+  float s=0.;
+  for(float i=1.;i<4.;i++){
+    vec2 grid=uv*150.*i;
+    vec2 cell=floor(grid), local=fract(grid)-.5;
+    float r=hash(cell+i*73.1);
+    float d=length(local);
+    s+=smoothstep(.12*r,.0,d)*r*(i*.4);
+  }
+  return vec3(s*.7,.6*s,.5*s);
+}
+
+void main(){
+  vec2 uv=(v_uv*2.-1.)*vec2(u_res.x/u_res.y,1.);
+
+  /* Camera with mouse drag */
+  float mx=u_mouse.x*PI;
+  float my=(u_mouse.y-.5)*PI*.8;
+  float zoom=u_zoom;
+
+  /* Build ray direction */
+  vec3 ro=vec3(sin(mx)*cos(my), sin(my), cos(mx)*cos(my))*zoom;
+  vec3 target=vec3(0.);
+  vec3 fw=normalize(target-ro);
+  vec3 rr=normalize(cross(fw,vec3(0.,1.,0.)));
+  vec3 up=cross(rr,fw);
+  vec3 rd=normalize(fw + uv.x*rr*.7 + uv.y*up*.7);
+
+  /* Lensing deflection */
+  rd=lensingRay(ro,rd,.38);
+
+  float t=u_time;
+  vec3 col=vec3(0.);
+
+  /* Event horizon check */
+  float bhR=.38;
+  float a=dot(rd,rd), b=2.*dot(ro,rd), c=dot(ro,ro)-bhR*bhR;
+  float disc=b*b-4.*a*c;
+  bool hitBH=disc>0.&&(-b-sqrt(disc))/(2.*a)>0.;
+
+  if(!hitBH){
+    /* Starfield */
+    col=starfield(rd)*1.2;
+
+    /* Disk march */
+    if(u_mode<.5||u_mode>2.5){
+      col+=marchDisk(ro,rd,t);
+    }
+
+    /* Photon sphere ring glow */
+    vec3 closestPoint=ro+rd*clamp(-dot(ro,rd),0.,10.);
+    float distToCenter=length(closestPoint);
+    float ringGlow=exp(-pow(distToCenter-.52,2.)*40.)*1.8;
+    col+=vec3(1.,.62,.18)*ringGlow*.5;
+
+    /* Mode: Lensing rings */
+    if(u_mode>0.5&&u_mode<1.5){
+      for(float i=1.;i<5.;i++){
+        float pr=photonRing(closestPoint,.38+i*.12,.03);
+        col+=vec3(.9,.55,.1)*pr*.8/i;
+      }
+    }
+
+    /* Mode: Jets (bluish beams) */
+    if(u_mode>1.5&&u_mode<2.5){
+      float jetR=length(vec2(rd.x,rd.z));
+      float jetAlign=abs(rd.y);
+      float jet=exp(-jetR*jetR*40.)*jetAlign*2.5;
+      float jetNoise=fbm(vec2(jetR*20.,t+jetAlign*3.));
+      col+=vec3(.3,.6,1.)*jet*jetNoise;
+      col+=marchDisk(ro,rd,t)*.4;
+    }
+
+    /* Mode: Radio (false color) */
+    if(u_mode>2.5){
+      float intensity=dot(col,vec3(.299,.587,.114));
+      col=mix(vec3(.05,.01,.0),
+          mix(vec3(.8,.2,.0),
+          mix(vec3(1.,.65,.0),vec3(1.,.95,.7),intensity*2.-1.),
+          intensity),intensity);
+    }
+
+    /* Vignette */
+    float vign=length(uv*.7);
+    col*=smoothstep(1.8,.2,vign);
+
+  } else {
+    /* Black hole shadow — absolute black with slight Hawking glow */
+    float hawking=exp(-dist(ro,vec3(0.))*1.2)*.015;
+    col=vec3(hawking*.8,hawking*.4,hawking*.1);
+  }
+
+  /* Tone mapping (Reinhard) */
+  col=col/(col+1.);
+  col=pow(col,vec3(1./2.2));
+
+  /* Film grain */
+  float grain=hash(v_uv+fract(t*.017))*.04-.02;
+  col=clamp(col+grain,0.,1.);
+
+  fragColor=vec4(col,1.);
+}`;
+
+/* ── Compile shader ── */
+function compile(src, type) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    console.warn(gl.getShaderInfoLog(sh));
+  }
+  return sh;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(VS, gl.VERTEX_SHADER));
+gl.attachShader(prog, compile(FS, gl.FRAGMENT_SHADER));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+/* ── Fullscreen quad ── */
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+/* ── Uniforms ── */
+const U = {
+  time:  gl.getUniformLocation(prog,'u_time'),
+  res:   gl.getUniformLocation(prog,'u_res'),
+  mouse: gl.getUniformLocation(prog,'u_mouse'),
+  mode:  gl.getUniformLocation(prog,'u_mode'),
+  zoom:  gl.getUniformLocation(prog,'u_zoom'),
+};
+
+/* ── State ── */
+let mouseX = .5, mouseY = .5;
+let targetMX = .5, targetMY = .5;
+let isDragging = false, lastMX = 0, lastMY = 0;
+let mode = 0, zoom = 2.8, targetZoom = 2.8;
+let frameCount = 0, lastFPSTime = performance.now();
+
+canvas.addEventListener('mousedown', e => { isDragging = true; lastMX = e.clientX; lastMY = e.clientY; });
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  // Cursor
+  const c = document.getElementById('cursor');
+  c.style.left = e.clientX + 'px';
+  c.style.top  = e.clientY + 'px';
+  // Drag rotate
+  if (isDragging) {
+    targetMX += (e.clientX - lastMX) / window.innerWidth * 2;
+    targetMY += (e.clientY - lastMY) / window.innerHeight;
+    lastMX = e.clientX; lastMY = e.clientY;
+  }
+});
+window.addEventListener('wheel', e => {
+  targetZoom = Math.max(1.4, Math.min(5, targetZoom + e.deltaY * .003));
+}, { passive: true });
+canvas.addEventListener('touchstart', e => { isDragging = true; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY; }, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  targetMX += (e.touches[0].clientX - lastMX) / window.innerWidth * 2;
+  targetMY += (e.touches[0].clientY - lastMY) / window.innerHeight;
+  lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
+}, { passive: true });
+canvas.addEventListener('touchend', () => isDragging = false);
+
+/* ── Mode switching ── */
+document.querySelectorAll('.pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    mode = parseInt(pill.dataset.mode);
+    const modes = ['ISCO','LENSING','JETS','RADIO'];
+    const readouts = [['1.2×10¹¹ K','0.92 a/M','0.999c','38.5 AU'],
+                      ['8.6×10¹⁰ K','0.92 a/M','—','38.5 AU'],
+                      ['1.4×10¹¹ K','0.97 a/M','0.999c','38.5 AU'],
+                      ['— K','0.92 a/M','—','38.5 AU']];
+    document.getElementById('r-mode').textContent = modes[mode];
+    document.getElementById('r-temp').textContent = readouts[mode][0];
+    document.getElementById('r-spin').textContent = readouts[mode][1];
+    document.getElementById('r-jet').textContent  = readouts[mode][2];
+    document.getElementById('r-rs').textContent   = readouts[mode][3];
+  });
+});
+
+/* ── Render loop ── */
+let t0 = performance.now();
+function render(now) {
+  requestAnimationFrame(render);
+  const t = (now - t0) * .001;
+
+  // Smooth mouse & zoom
+  mouseX += (targetMX - mouseX) * .06;
+  mouseY += (targetMY - mouseY) * .06;
+  zoom   += (targetZoom - zoom)  * .08;
+
+  // Auto-rotate when not dragging
+  if (!isDragging) targetMX += .0012;
+
+  gl.uniform1f(U.time,  t);
+  gl.uniform2f(U.res,   canvas.width, canvas.height);
+  gl.uniform2f(U.mouse, mouseX, mouseY);
+  gl.uniform1f(U.mode,  mode);
+  gl.uniform1f(U.zoom,  zoom);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // FPS
+  frameCount++;
+  if (now - lastFPSTime > 1000) {
+    document.getElementById('fps-counter').textContent =
+      Math.round(frameCount * 1000 / (now - lastFPSTime)) + ' fps';
+    frameCount = 0; lastFPSTime = now;
+  }
+}
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
