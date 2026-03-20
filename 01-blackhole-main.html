@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M87 — First Light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Mono:wght@300;400&family=DM+Sans:wght@200;300;400&display=swap" rel="stylesheet"/>
+<style>
+/* ─────────────────────────────────────────
+   RESET + TOKENS
+───────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --gold:   #c8a863;
+  --amber:  #e8943a;
+  --cream:  #f5ede0;
+  --dim:    rgba(245,237,224,.55);
+  --faint:  rgba(245,237,224,.15);
+  --bg:     #03020a;
+  --serif:  'Cormorant Garamond', Georgia, serif;
+  --mono:   'DM Mono', monospace;
+  --sans:   'DM Sans', sans-serif;
+  --ease-out: cubic-bezier(.16,1,.3,1);
+}
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--cream);
+  font-family: var(--sans);
+  font-weight: 300;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ─────────────────────────────────────────
+   CUSTOM CURSOR
+───────────────────────────────────────── */
+#cursor {
+  position: fixed; z-index: 9999;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+#cur-ring {
+  width: 40px; height: 40px;
+  border: 1px solid rgba(200,168,99,.6);
+  border-radius: 50%;
+  transform: translate(-50%,-50%);
+  transition: width .3s var(--ease-out), height .3s var(--ease-out), border-color .3s;
+}
+#cur-dot {
+  position: absolute; top: 50%; left: 50%;
+  width: 4px; height: 4px;
+  background: var(--gold);
+  border-radius: 50%;
+  transform: translate(-50%,-50%);
+  transition: transform .1s;
+}
+body:has(a:hover) #cur-ring,
+body:has(button:hover) #cur-ring { width: 64px; height: 64px; border-color: var(--gold); }
+
+/* ─────────────────────────────────────────
+   LOADING SCREEN
+───────────────────────────────────────── */
+#loader {
+  position: fixed; inset: 0; z-index: 8000;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px;
+  transition: opacity 1s ease, visibility 1s ease;
+}
+#loader.hidden { opacity: 0; visibility: hidden; }
+.loader-ring {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  border: 1px solid rgba(200,168,99,.15);
+  border-top-color: var(--gold);
+  animation: spin 1.4s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .2em;
+  color: rgba(200,168,99,.5);
+}
+.loader-progress {
+  width: 200px; height: 1px;
+  background: rgba(200,168,99,.1);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.loader-fill {
+  height: 100%;
+  background: var(--gold);
+  width: 0;
+  transition: width .1s linear;
+}
+
+/* ─────────────────────────────────────────
+   NAV
+───────────────────────────────────────── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 24px 48px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 0.5px solid rgba(245,237,224,.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transform: translateY(-100%);
+  transition: transform 1s var(--ease-out) 1.2s;
+}
+nav.visible { transform: translateY(0); }
+.nav-logo {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: .15em;
+  color: var(--gold);
+}
+.nav-links { display: flex; gap: 36px; align-items: center; }
+.nav-links a {
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--dim); text-decoration: none;
+  transition: color .3s;
+}
+.nav-links a:hover { color: var(--cream); }
+
+/* ─────────────────────────────────────────
+   HERO — CANVAS + TEXT
+───────────────────────────────────────── */
+#hero {
+  position: relative;
+  height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+#hero-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+
+/* Vignette overlay */
+#hero::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 60% 60% at 50% 50%, transparent 30%, rgba(3,2,10,.7) 70%, var(--bg) 100%);
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative; z-index: 2;
+  text-align: center;
+  pointer-events: none;
+}
+.hero-date {
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: .25em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 24px;
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 1s ease .2s, transform 1s var(--ease-out) .2s;
+}
+.hero-title {
+  font-family: var(--serif);
+  font-size: clamp(52px, 10vw, 120px);
+  font-weight: 300; letter-spacing: -2px; line-height: .96;
+  opacity: 0; transform: translateY(30px);
+  transition: opacity 1.2s ease .4s, transform 1.2s var(--ease-out) .4s;
+}
+.hero-title em { font-style: italic; color: var(--gold); }
+.hero-sub {
+  font-size: 14px; color: var(--dim);
+  letter-spacing: .08em;
+  margin-top: 24px;
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 1s ease .8s, transform 1s var(--ease-out) .8s;
+}
+.hero-content.revealed .hero-date,
+.hero-content.revealed .hero-title,
+.hero-content.revealed .hero-sub { opacity: 1; transform: translateY(0); }
+
+.scroll-cue {
+  position: absolute; bottom: 40px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  opacity: 0; animation: fadeIn 1s ease 2.5s forwards;
+}
+@keyframes fadeIn { to { opacity: 1; } }
+.scroll-cue-line {
+  width: 1px; height: 48px;
+  background: linear-gradient(var(--gold), transparent);
+  animation: scrollLine 1.8s ease-in-out infinite;
+}
+@keyframes scrollLine {
+  0%,100% { transform: scaleY(1); transform-origin: top; }
+  50% { transform: scaleY(.4); transform-origin: top; }
+}
+.scroll-cue-label {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: .2em; color: var(--gold); opacity: .5;
+}
+
+/* ─────────────────────────────────────────
+   SECTION BASE
+───────────────────────────────────────── */
+section {
+  position: relative;
+  padding: 120px 48px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ─────────────────────────────────────────
+   SECTION: DISCOVERY
+───────────────────────────────────────── */
+.discovery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+.discovery-num {
+  font-family: var(--serif);
+  font-size: 160px;
+  font-weight: 300;
+  line-height: 1;
+  color: rgba(200,168,99,.06);
+  position: absolute;
+  top: 80px; left: 0;
+  pointer-events: none;
+  letter-spacing: -6px;
+}
+.section-tag {
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 20px;
+  display: flex; align-items: center; gap: 10px;
+}
+.section-tag::before {
+  content: '';
+  display: block; width: 24px; height: 1px;
+  background: var(--gold);
+}
+.section-title {
+  font-family: var(--serif);
+  font-size: clamp(36px, 5vw, 60px);
+  font-weight: 300; letter-spacing: -1px; line-height: 1.1;
+  margin-bottom: 24px;
+}
+.section-title em { font-style: italic; color: var(--gold); }
+.section-body {
+  font-size: 15px; color: var(--dim); line-height: 1.9;
+}
+.section-body p + p { margin-top: 16px; }
+
+/* Black hole visual — CSS + canvas */
+.bh-visual {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+#bh-canvas-small {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+}
+
+/* ─────────────────────────────────────────
+   SECTION: NUMBERS (STATS)
+───────────────────────────────────────── */
+.stats-band {
+  background: rgba(200,168,99,.03);
+  border-top: 0.5px solid rgba(200,168,99,.12);
+  border-bottom: 0.5px solid rgba(200,168,99,.12);
+  padding: 80px 48px;
+}
+.stats-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(4,1fr);
+  gap: 0;
+}
+.stat-item {
+  padding: 0 40px;
+  border-right: 0.5px solid rgba(200,168,99,.12);
+}
+.stat-item:first-child { padding-left: 0; }
+.stat-item:last-child { border-right: none; }
+.stat-num {
+  font-family: var(--serif);
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 300; letter-spacing: -2px; line-height: 1;
+  color: var(--cream);
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-num sup { font-size: .4em; vertical-align: super; color: var(--gold); }
+.stat-unit { font-family: var(--mono); font-size: 10px; letter-spacing: .15em; color: var(--gold); margin-bottom: 8px; }
+.stat-desc { font-size: 13px; color: var(--dim); line-height: 1.6; }
+
+/* ─────────────────────────────────────────
+   SECTION: TIMELINE
+───────────────────────────────────────── */
+.timeline {
+  position: relative;
+  padding-left: 40px;
+  border-left: 0.5px solid rgba(200,168,99,.2);
+  display: flex; flex-direction: column; gap: 0;
+}
+.tl-item {
+  padding: 0 0 56px 40px;
+  position: relative;
+  opacity: 0; transform: translateX(-20px);
+  transition: opacity .8s var(--ease-out), transform .8s var(--ease-out);
+}
+.tl-item.visible { opacity: 1; transform: translateX(0); }
+.tl-dot {
+  position: absolute; left: -44px; top: 6px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--gold);
+  transition: background .4s;
+}
+.tl-item.visible .tl-dot { background: var(--gold); }
+.tl-year {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: .15em; color: var(--gold); margin-bottom: 8px;
+}
+.tl-title {
+  font-family: var(--serif); font-size: 22px;
+  font-weight: 400; letter-spacing: -.3px; margin-bottom: 8px;
+}
+.tl-body { font-size: 14px; color: var(--dim); line-height: 1.7; }
+
+/* ─────────────────────────────────────────
+   SECTION: FULL-BLEED CANVAS SECTION
+───────────────────────────────────────── */
+#canvas-section {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+}
+#orbit-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+.canvas-caption {
+  position: absolute; z-index: 2;
+  bottom: 60px; left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+.canvas-caption h2 {
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 48px);
+  font-weight: 300; letter-spacing: -1px;
+}
+.canvas-caption h2 em { font-style: italic; color: var(--gold); }
+.canvas-caption p {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: .15em; color: var(--dim); margin-top: 12px;
+}
+
+/* ─────────────────────────────────────────
+   SECTION: IMAGE GRID
+───────────────────────────────────────── */
+.img-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 3px;
+}
+.img-cell {
+  background: #0a0812;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+}
+.img-cell:first-child { grid-row: span 2; }
+.img-cell canvas {
+  width: 100%; height: 100%;
+  display: block;
+  transition: transform .8s var(--ease-out);
+}
+.img-cell:hover canvas { transform: scale(1.04); }
+.img-label {
+  position: absolute; bottom: 16px; left: 16px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: .12em; color: var(--gold); opacity: .7;
+}
+
+/* ─────────────────────────────────────────
+   SECTION: QUOTE
+───────────────────────────────────────── */
+.quote-section {
+  padding: 120px 48px;
+  text-align: center;
+  border-top: 0.5px solid rgba(200,168,99,.08);
+}
+blockquote {
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 52px);
+  font-weight: 300; font-style: italic;
+  letter-spacing: -1px; line-height: 1.25;
+  color: var(--cream); max-width: 900px; margin: 0 auto 28px;
+}
+blockquote em { color: var(--gold); font-style: normal; }
+cite {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: .15em; color: var(--dim);
+}
+
+/* ─────────────────────────────────────────
+   FOOTER
+───────────────────────────────────────── */
+footer {
+  border-top: 0.5px solid rgba(200,168,99,.12);
+  padding: 48px;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}
+.footer-logo { font-family: var(--mono); font-size: 13px; letter-spacing: .15em; color: var(--gold); }
+.footer-copy { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: rgba(245,237,224,.2); }
+
+/* ─────────────────────────────────────────
+   REVEAL UTILITY
+───────────────────────────────────────── */
+.reveal {
+  opacity: 0; transform: translateY(32px);
+  transition: opacity .9s var(--ease-out), transform .9s var(--ease-out);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* ─────────────────────────────────────────
+   HORIZONTAL SCROLL BAR
+───────────────────────────────────────── */
+#progress-bar {
+  position: fixed; top: 0; left: 0;
+  height: 1px; background: var(--gold);
+  z-index: 1000; transition: width .05s linear;
+  opacity: .6;
+}
+
+/* ─────────────────────────────────────────
+   PARALLAX LAYER
+───────────────────────────────────────── */
+.parallax-text {
+  position: absolute;
+  font-family: var(--serif);
+  font-size: clamp(80px, 15vw, 200px);
+  font-weight: 300; font-style: italic;
+  color: rgba(200,168,99,.03);
+  white-space: nowrap;
+  pointer-events: none;
+  letter-spacing: -6px;
+  will-change: transform;
+}
+
+@media (max-width: 768px) {
+  nav { padding: 20px 24px; }
+  section { padding: 80px 24px; }
+  .discovery-grid { grid-template-columns: 1fr; gap: 40px; }
+  .stats-inner { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .stat-item { padding: 0; border-right: none; border-bottom: 0.5px solid rgba(200,168,99,.12); padding-bottom: 24px; }
+  .img-grid { grid-template-columns: 1fr; }
+  .img-cell:first-child { grid-row: span 1; }
+  footer { padding: 32px 24px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Progress bar -->
+<div id="progress-bar"></div>
+
+<!-- Cursor -->
+<div id="cursor">
+  <div id="cur-ring"><div id="cur-dot"></div></div>
+</div>
+
+<!-- Loader -->
+<div id="loader">
+  <div class="loader-ring"></div>
+  <div class="loader-text">INITIALISING · M87*</div>
+  <div class="loader-progress"><div class="loader-fill" id="loader-fill"></div></div>
+</div>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-logo">M87 · FIRST LIGHT</div>
+  <div class="nav-links">
+    <a href="#discovery">Discovery</a>
+    <a href="#data">Data</a>
+    <a href="#timeline">Timeline</a>
+    <a href="#science">Science</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════
+     HERO
+═══════════════════════════════════════ -->
+<div id="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-content" id="hero-content">
+    <div class="hero-date">April 10, 2019 · Event Horizon Telescope</div>
+    <h1 class="hero-title">The first <em>image</em><br>of a black hole</h1>
+    <p class="hero-sub">M87* · 6.5 billion solar masses · 55 million light-years away</p>
+  </div>
+  <div class="scroll-cue">
+    <div class="scroll-cue-line"></div>
+    <div class="scroll-cue-label">Explore</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     DISCOVERY
+═══════════════════════════════════════ -->
+<section id="discovery">
+  <div class="parallax-text" style="top:-40px;left:-40px;" data-speed=".3">M87</div>
+  <div class="discovery-grid">
+    <div class="reveal">
+      <div class="section-tag">The Discovery</div>
+      <h2 class="section-title">A shadow in<br>the <em>light</em></h2>
+      <div class="section-body">
+        <p>On April 10, 2019, the Event Horizon Telescope Collaboration released the first direct visual evidence of a supermassive black hole — a gravitational monster at the center of galaxy Messier 87.</p>
+        <p>The image, constructed from data gathered by eight radio observatories across four continents, shows the bright ring of superheated plasma encircling the dark central void — the event horizon itself.</p>
+        <p>What appears as a simple orange ring represents the boundary beyond which not even light can escape — the most extreme environment in the observable universe.</p>
+      </div>
+    </div>
+    <div class="bh-visual reveal" style="transition-delay:.2s">
+      <canvas id="bh-canvas-small" width="400" height="400"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     STATS
+═══════════════════════════════════════ -->
+<div class="stats-band" id="data">
+  <div class="stats-inner">
+    <div class="stat-item reveal">
+      <div class="stat-unit">Mass</div>
+      <div class="stat-num">6.5<sup>×10⁹</sup></div>
+      <div class="stat-desc">Solar masses. If placed at the center of our solar system, it would swallow everything past Pluto.</div>
+    </div>
+    <div class="stat-item reveal" style="transition-delay:.1s">
+      <div class="stat-unit">Distance</div>
+      <div class="stat-num">55<sup>M ly</sup></div>
+      <div class="stat-desc">Light-years from Earth. The light we captured left M87 before humans walked on this planet.</div>
+    </div>
+    <div class="stat-item reveal" style="transition-delay:.2s">
+      <div class="stat-unit">Diameter</div>
+      <div class="stat-num">40<sup>bn km</sup></div>
+      <div class="stat-desc">The event horizon spans 40 billion kilometers — larger than the orbit of Neptune around the Sun.</div>
+    </div>
+    <div class="stat-item reveal" style="transition-delay:.3s">
+      <div class="stat-unit">Observatories</div>
+      <div class="stat-num">8</div>
+      <div class="stat-desc">Radio telescopes on 4 continents formed a virtual Earth-sized dish to capture this image.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ORBIT CANVAS SECTION
+═══════════════════════════════════════ -->
+<div id="canvas-section">
+  <canvas id="orbit-canvas"></canvas>
+  <div class="canvas-caption reveal">
+    <h2>The <em>accretion disk</em></h2>
+    <p>Plasma spiraling at relativistic speeds · Temperature exceeding 100 billion Kelvin</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCIENCE
+═══════════════════════════════════════ -->
+<section id="science">
+  <div class="discovery-grid" style="gap:60px">
+    <div class="bh-visual reveal">
+      <canvas id="img-grid-canvas-1" width="500" height="500"></canvas>
+    </div>
+    <div class="reveal" style="transition-delay:.15s">
+      <div class="section-tag">The Physics</div>
+      <h2 class="section-title">Where spacetime<br>breaks <em>down</em></h2>
+      <div class="section-body">
+        <p>At the event horizon, the escape velocity equals the speed of light. Beyond it, the curvature of spacetime becomes so extreme that all paths — including those of photons — lead inward.</p>
+        <p>The bright crescent visible in the image is brighter on one side due to relativistic beaming: the plasma moving toward us is blue-shifted and appears more luminous.</p>
+        <p>The dark central region — the "shadow" — is approximately 2.5 times larger than the actual event horizon, magnified by the gravitational lensing of light around the singularity.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     TIMELINE
+═══════════════════════════════════════ -->
+<section id="timeline" style="max-width:800px">
+  <div class="section-tag reveal">Timeline</div>
+  <h2 class="section-title reveal" style="margin-bottom:60px">A century<br>of <em>pursuit</em></h2>
+  <div class="timeline">
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-year">1915</div><div class="tl-title">General Relativity</div><div class="tl-body">Einstein publishes his field equations predicting the warping of spacetime by mass, laying the groundwork for black hole theory.</div></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-year">1916</div><div class="tl-title">Schwarzschild Radius</div><div class="tl-body">Karl Schwarzschild derives the first exact solution, describing the geometry of spacetime around a point mass — the birth of the event horizon concept.</div></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-year">1974</div><div class="tl-title">Hawking Radiation</div><div class="tl-body">Stephen Hawking theorises that black holes emit thermal radiation and slowly evaporate — uniting quantum mechanics with general relativity.</div></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-year">2017</div><div class="tl-title">EHT Observations</div><div class="tl-body">Eight observatories across Earth simultaneously observe M87* for ten days, collecting 5 petabytes of data stored on half-ton hard drive arrays.</div></div>
+    <div class="tl-item"><div class="tl-dot"></div><div class="tl-year">2019</div><div class="tl-title">First Image Released</div><div class="tl-body">The Event Horizon Telescope Collaboration publishes the first resolved image of a black hole's shadow — confirming predictions made a century earlier.</div></div>
+    <div class="tl-item" style="padding-bottom:0"><div class="tl-dot"></div><div class="tl-year">2022</div><div class="tl-title">Sagittarius A*</div><div class="tl-body">The EHT captures an image of the black hole at the center of our own Milky Way — 4 million solar masses, 26,000 light-years from home.</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     QUOTE
+═══════════════════════════════════════ -->
+<div class="quote-section">
+  <blockquote class="reveal">"We have seen what we thought was <em>unseeable</em>."</blockquote>
+  <cite class="reveal" style="transition-delay:.2s">— Sheperd Doeleman, EHT Director · April 10, 2019</cite>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">M87 · FIRST LIGHT</div>
+  <div class="footer-copy">Data: Event Horizon Telescope Collaboration · NSF · ESO · 2019</div>
+</footer>
+
+<!-- ═══════════════════════════════════════
+     JAVASCRIPT — ALL EFFECTS
+═══════════════════════════════════════ -->
+<script>
+/* ──────────────────────────────
+   UTILS
+────────────────────────────── */
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const PI2 = Math.PI * 2;
+function lerp(a,b,t){ return a+(b-a)*t; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function rand(a,b){ return a+(b-a)*Math.random(); }
+
+/* ──────────────────────────────
+   LOADER
+────────────────────────────── */
+let loadPct = 0;
+const loaderFill = $('#loader-fill');
+const loaderInterval = setInterval(() => {
+  loadPct += rand(4, 12);
+  if (loadPct >= 100) { loadPct = 100; clearInterval(loaderInterval); }
+  loaderFill.style.width = loadPct + '%';
+}, 80);
+setTimeout(() => {
+  $('#loader').classList.add('hidden');
+  $('#nav').classList.add('visible');
+  $('#hero-content').classList.add('revealed');
+}, 1800);
+
+/* ──────────────────────────────
+   CURSOR
+────────────────────────────── */
+const cursorEl = $('#cursor');
+const curPos = { x: 0, y: 0 }, curTarget = { x: 0, y: 0 };
+document.addEventListener('mousemove', e => { curTarget.x = e.clientX; curTarget.y = e.clientY; });
+(function animCursor() {
+  curPos.x = lerp(curPos.x, curTarget.x, .14);
+  curPos.y = lerp(curPos.y, curTarget.y, .14);
+  cursorEl.style.left = curPos.x + 'px';
+  cursorEl.style.top  = curPos.y + 'px';
+  requestAnimationFrame(animCursor);
+})();
+
+/* ──────────────────────────────
+   SCROLL PROGRESS
+────────────────────────────── */
+window.addEventListener('scroll', () => {
+  const pct = window.scrollY / (document.body.scrollHeight - innerHeight) * 100;
+  $('#progress-bar').style.width = pct + '%';
+});
+
+/* ──────────────────────────────
+   INTERSECTION OBSERVER — REVEALS
+────────────────────────────── */
+const revealObs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+}, { threshold: 0.12 });
+$$('.reveal, .tl-item').forEach(el => revealObs.observe(el));
+
+/* ──────────────────────────────
+   PARALLAX
+────────────────────────────── */
+$$('[data-speed]').forEach(el => {
+  window.addEventListener('scroll', () => {
+    const speed = parseFloat(el.dataset.speed);
+    el.style.transform = `translateY(${window.scrollY * speed}px)`;
+  }, { passive: true });
+});
+
+/* ──────────────────────────────
+   HERO CANVAS — BLACK HOLE SIMULATION
+   Accretion disk + gravitational lensing rings
+────────────────────────────── */
+(function initHeroCanvas() {
+  const canvas = $('#hero-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, t = 0;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Stars
+  const stars = Array.from({ length: 600 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: rand(.3, 1.8),
+    a: rand(.1, .9),
+    twinkle: rand(0, PI2)
+  }));
+
+  // Disk particles
+  const diskParticles = Array.from({ length: 800 }, () => {
+    const angle = rand(0, PI2);
+    const r = rand(.3, 1);
+    return {
+      angle,
+      baseR: r,
+      r,
+      speed: rand(.003, .012) * (1 / r),
+      a: rand(.3, .9),
+      size: rand(.8, 3),
+      colorT: Math.random()
+    };
+  });
+
+  function drawHero() {
+    t += .008;
+    ctx.fillStyle = 'rgba(3,2,10,.18)';
+    ctx.fillRect(0, 0, W, H);
+
+    const cx = W / 2, cy = H / 2;
+    const R = Math.min(W, H) * .28; // accretion disk radius
+
+    // Stars
+    stars.forEach(s => {
+      const x = s.x * W, y = s.y * H;
+      const twink = .5 + .5 * Math.sin(t * 2 + s.twinkle);
+      ctx.beginPath();
+      ctx.arc(x, y, s.r, 0, PI2);
+      ctx.fillStyle = `rgba(245,237,224,${s.a * twink})`;
+      ctx.fill();
+    });
+
+    // Gravitational lensing rings
+    for (let ring = 3; ring >= 1; ring--) {
+      const ringR = R * (1 + ring * .18);
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringR, 0, PI2);
+      ctx.strokeStyle = `rgba(200,168,99,${.04 / ring})`;
+      ctx.lineWidth = ring * 2;
+      ctx.stroke();
+    }
+
+    // Accretion disk particles
+    diskParticles.forEach(p => {
+      p.angle += p.speed;
+      // Simulate relativistic beaming: right side brighter
+      const beaming = .5 + .5 * Math.cos(p.angle + Math.PI);
+      const diskR = R * p.baseR;
+
+      const x = cx + Math.cos(p.angle) * diskR * 1.8;
+      const y = cy + Math.sin(p.angle) * diskR * .5;
+
+      // Color: orange-gold for hot plasma
+      const hue = 20 + p.colorT * 30;
+      const lum = 40 + beaming * 35;
+      const alpha = p.a * beaming * (.8 + .2 * Math.sin(t * 5 + p.angle));
+
+      ctx.beginPath();
+      ctx.arc(x, y, p.size, 0, PI2);
+      ctx.fillStyle = `hsla(${hue},90%,${lum}%,${alpha})`;
+      ctx.fill();
+    });
+
+    // Photon sphere glow
+    const photonR = R * .55;
+    const glowGrad = ctx.createRadialGradient(cx, cy, photonR * .6, cx, cy, photonR * 1.4);
+    glowGrad.addColorStop(0, 'rgba(200,148,60,.0)');
+    glowGrad.addColorStop(.5, 'rgba(200,148,60,.12)');
+    glowGrad.addColorStop(1, 'rgba(200,148,60,.0)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, photonR * 1.4, 0, PI2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    // Black hole — absolute darkness
+    const bhR = R * .38;
+    const bhGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, bhR);
+    bhGrad.addColorStop(0,   '#000');
+    bhGrad.addColorStop(.7,  '#000');
+    bhGrad.addColorStop(.85, 'rgba(0,0,0,.9)');
+    bhGrad.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, bhR, 0, PI2);
+    ctx.fillStyle = bhGrad;
+    ctx.fill();
+
+    // Inner edge bright ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, bhR * 1.06, 0, PI2);
+    ctx.strokeStyle = 'rgba(232,148,58,.25)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    requestAnimationFrame(drawHero);
+  }
+  drawHero();
+})();
+
+/* ──────────────────────────────
+   SMALL BH CANVAS (discovery section)
+────────────────────────────── */
+(function initSmallBH() {
+  const canvas = $('#bh-canvas-small');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = 400, H = 400;
+  canvas.width = W; canvas.height = H;
+  let t = 0;
+
+  const particles = Array.from({ length: 500 }, () => {
+    const angle = rand(0, PI2);
+    const r = rand(.4, .9);
+    return { angle, baseR: r, speed: rand(.005,.015)*(1/r), a: rand(.4,.95), sz: rand(.6,2.5), ct: Math.random() };
+  });
+
+  function draw() {
+    t += .01;
+    ctx.fillStyle = 'rgba(10,8,18,.22)';
+    ctx.fillRect(0, 0, W, H);
+
+    const cx = W/2, cy = H/2, R = 140;
+
+    particles.forEach(p => {
+      p.angle += p.speed;
+      const beam = .4 + .6 * Math.cos(p.angle + Math.PI);
+      const x = cx + Math.cos(p.angle) * R * p.baseR * 1.7;
+      const y = cy + Math.sin(p.angle) * R * p.baseR * .45;
+      const h = 18 + p.ct * 28;
+      ctx.beginPath();
+      ctx.arc(x, y, p.sz, 0, PI2);
+      ctx.fillStyle = `hsla(${h},85%,${35 + beam*30}%,${p.a * beam})`;
+      ctx.fill();
+    });
+
+    // BH shadow
+    const g = ctx.createRadialGradient(cx,cy,0,cx,cy,R*.52);
+    g.addColorStop(0,'#000');g.addColorStop(.75,'#000');
+    g.addColorStop(.9,'rgba(0,0,0,.7)');g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.arc(cx,cy,R*.52,0,PI2); ctx.fillStyle=g; ctx.fill();
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ──────────────────────────────
+   ORBIT CANVAS — full bleed section
+   Relativistic jets + orbiting matter
+────────────────────────────── */
+(function initOrbitCanvas() {
+  const canvas = $('#orbit-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, t = 0;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Orbiting ring particles
+  const rings = [.25,.38,.52,.67,.82,.95].map(r => ({
+    r,
+    particles: Array.from({length: Math.floor(r * 180 + 60)}, () => ({
+      angle: rand(0, PI2),
+      speed: rand(.002,.008) * (1/r) * (Math.random() < .5 ? 1 : -1),
+      a:     rand(.2,.8),
+      sz:    rand(.5, 2),
+      hue:   rand(10,50)
+    }))
+  }));
+
+  // Jet particles
+  const jets = Array.from({length: 300}, (_, i) => ({
+    t: Math.random(),
+    dir: i < 150 ? 1 : -1,
+    speed: rand(.003,.009),
+    offset: rand(-15,15),
+    a: rand(.3,.8),
+    sz: rand(.5,1.8)
+  }));
+
+  function draw() {
+    t += .006;
+    ctx.fillStyle = 'rgba(3,2,10,.12)';
+    ctx.fillRect(0,0,W,H);
+
+    const cx = W/2, cy = H/2;
+    const R = Math.min(W,H) * .32;
+
+    // Background glow
+    const bg = ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.6);
+    bg.addColorStop(0,'rgba(30,18,8,.0)');
+    bg.addColorStop(.4,'rgba(30,18,8,.08)');
+    bg.addColorStop(1,'rgba(3,2,10,.0)');
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+
+    // Relativistic jets (top and bottom)
+    jets.forEach(j => {
+      j.t += j.speed;
+      if (j.t > 1) j.t = 0;
+      const dist = j.t * H * .55;
+      const x = cx + j.offset + Math.sin(j.t * 8) * 6;
+      const y = cy + j.dir * dist;
+      const alpha = j.a * (1 - j.t) * .8;
+      ctx.beginPath();
+      ctx.arc(x, y, j.sz, 0, PI2);
+      ctx.fillStyle = `rgba(168,220,255,${alpha})`;
+      ctx.fill();
+    });
+
+    // Rings
+    rings.forEach((ring, ri) => {
+      const diskR = R * ring.r;
+      ring.particles.forEach(p => {
+        p.angle += p.speed;
+        const beam = .3 + .7 * Math.cos(p.angle + Math.PI);
+        const x = cx + Math.cos(p.angle) * diskR * 1.9;
+        const y = cy + Math.sin(p.angle) * diskR * .4;
+        ctx.beginPath();
+        ctx.arc(x, y, p.sz, 0, PI2);
+        ctx.fillStyle = `hsla(${p.hue},80%,${30 + beam*35}%,${p.a*beam})`;
+        ctx.fill();
+      });
+    });
+
+    // Core black circle
+    const core = ctx.createRadialGradient(cx,cy,0,cx,cy,R*.42);
+    core.addColorStop(0,'#000');core.addColorStop(.8,'#000');
+    core.addColorStop(.92,'rgba(0,0,0,.6)');core.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.arc(cx,cy,R*.42,0,PI2); ctx.fillStyle=core; ctx.fill();
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ──────────────────────────────
+   SCIENCE SECTION CANVAS
+   (false-color radio image simulation)
+────────────────────────────── */
+(function initScienceCanvas() {
+  const canvas = $('#img-grid-canvas-1');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = 500, H = 500;
+  canvas.width = W; canvas.height = H;
+  let t = 0;
+
+  // Pre-generate noise texture for radio image feel
+  const noiseCanvas = document.createElement('canvas');
+  noiseCanvas.width = W; noiseCanvas.height = H;
+  const nc = noiseCanvas.getContext('2d');
+  const imgData = nc.createImageData(W, H);
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    const n = Math.random() * 20;
+    imgData.data[i] = imgData.data[i+1] = imgData.data[i+2] = n;
+    imgData.data[i+3] = 255;
+  }
+  nc.putImageData(imgData, 0, 0);
+
+  const particles = Array.from({length: 600}, () => {
+    const angle = rand(0, PI2);
+    const r = rand(.3,.92);
+    return { angle, r, speed: rand(.004,.014)*(1/r), a: rand(.5,1), sz: rand(.8,2.8), ct: Math.random() };
+  });
+
+  function draw() {
+    t += .008;
+    ctx.fillStyle = 'rgba(5,3,12,.2)';
+    ctx.fillRect(0,0,W,H);
+
+    // Noise grain
+    ctx.globalAlpha = .06;
+    ctx.drawImage(noiseCanvas, 0, 0);
+    ctx.globalAlpha = 1;
+
+    const cx = W/2, cy = H/2, R = 170;
+
+    particles.forEach(p => {
+      p.angle += p.speed;
+      const beam = .35 + .65 * Math.cos(p.angle + Math.PI * 1.1);
+      const x = cx + Math.cos(p.angle) * R * p.r * 1.75;
+      const y = cy + Math.sin(p.angle) * R * p.r * .42;
+      // False-color radio palette: orange → yellow → white hot
+      const brightness = beam * p.a;
+      const r_ = Math.min(255, brightness * 380);
+      const g_ = Math.min(255, brightness * 200);
+      const b_ = Math.min(255, brightness * 40);
+      ctx.beginPath();
+      ctx.arc(x, y, p.sz, 0, PI2);
+      ctx.fillStyle = `rgba(${Math.round(r_)},${Math.round(g_)},${Math.round(b_)},${brightness})`;
+      ctx.fill();
+    });
+
+    // Shadow
+    const sh = ctx.createRadialGradient(cx,cy,0,cx,cy,R*.5);
+    sh.addColorStop(0,'#000');sh.addColorStop(.78,'#000');
+    sh.addColorStop(.9,'rgba(0,0,0,.5)');sh.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.arc(cx,cy,R*.5,0,PI2); ctx.fillStyle=sh; ctx.fill();
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ──────────────────────────────
+   COUNT-UP ANIMATION for stats
+────────────────────────────── */
+const countUpObs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    const el = e.target;
+    const target = parseFloat(el.dataset.target || 0);
+    const suffix = el.dataset.suffix || '';
+    const dur = 1600;
+    const start = performance.now();
+    function step(now) {
+      const p = clamp((now - start) / dur, 0, 1);
+      const ease = 1 - Math.pow(1-p, 3);
+      el.textContent = (target < 10 ? (ease*target).toFixed(1) : Math.round(ease*target)) + suffix;
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+    countUpObs.unobserve(el);
+  });
+}, { threshold: .5 });
+
+/* ──────────────────────────────
+   SMOOTH SCROLL LERP
+────────────────────────────── */
+let scrollY = window.scrollY, targetScrollY = window.scrollY;
+// Native smooth scroll is fine; just track for parallax
+window.addEventListener('scroll', () => { targetScrollY = window.scrollY; }, { passive: true });
+</script>
+</body>
+</html>
